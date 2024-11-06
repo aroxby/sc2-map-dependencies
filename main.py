@@ -1,89 +1,124 @@
 #!/usr/bin/env python3
-from dataclasses import dataclass, Field, field, fields
+import dataclasses
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 import sys
 
 
-def serializable_field(size: int) -> Field:
-    return field(metadata={'size': size})
+class Field(ABC):
+    @abstractmethod
+    def deserialize(self, data: bytes):
+        raise NotImplementedError
 
 
-def deserialize(data: bytes, cls, offset: int = 0):
+class ByteArrayField(Field):
+    def __init__(self, length: int):
+        self.length = length
+
+    def deserialize(self, data: bytes) -> (bytes, int):
+        return data[:self.length], self.length
+
+
+class UInt16Field(Field):
+    length = 2
+
+    def deserialize(self, data: bytes) -> (int, int):
+        return int.from_bytes(data[:self.length], byteorder='little', signed=False), self.length
+
+
+class UInt32Field(UInt16Field):
+    length = 4
+
+
+class ZStringField(Field):
+    def deserialize(self, data: bytes) -> (str, int):
+        mbs, _ = data.split(b'\0', 1)
+        return mbs.decode('utf-8'), len(mbs) + 1
+
+
+class ListField:
+    def __init__(self, length_field: dataclasses.Field, element_field: Field):
+        self.length_field = length_field
+        self.element_field = element_field
+
+    def deserialize(self, args: dict, data: bytes, offset: int = 0) -> (list, int):
+        list_length = args[self.length_field.name]
+        elements = []
+
+        for _ in range(list_length):
+            element, element_length = self.element_field.deserialize(data[offset:])
+            elements.append(element)
+            offset += element_length
+
+        return elements, offset
+
+
+def serializable_field(serializer: Field) -> dataclasses.Field:
+    return dataclasses.field(metadata={'serializer': serializer})
+
+
+def serializable_list_field(list_field: ListField) -> dataclasses.Field:
+    return dataclasses.field(metadata={'list': list_field})
+
+
+def deserialize(cls, data: bytes, offset: int = 0):
     args = {}
-    for fld in fields(cls):
-        args[fld.name] = fld.type()
-        size = fld.metadata.get('size', None)
-        if size is not None:
-            value_bytes = data[offset: offset + size]
-            offset += size
+    for fld in dataclasses.fields(cls):
+        list_field = fld.metadata.get('list', None)
+        serializer = fld.metadata.get('serializer', None)
 
-            if isinstance(args[fld.name], bytes):
-                args[fld.name] = value_bytes[:]
-            elif isinstance(args[fld.name], int):
-                args[fld.name] = fld.type.from_bytes(value_bytes, 'little', signed=False)
-            else:
-                raise TypeError(f'No deserialize available for {fld.type}')
+        if list_field is not None:
+            args[fld.name], length = list_field.deserialize(args, data[offset:])
+            offset += length
+        elif serializer is not None:
+            # TODO: If we pass `args` here as well then we could make ListField follow the Field pattern
+            args[fld.name], length = serializer.deserialize(data[offset:])
+            offset += length
+        else:
+            raise TypeError(f'Unsupported field {fld}')
 
     obj = cls(**args)
     return obj, offset
 
 
 @dataclass
-class DocumentHeaderData:
-    map_magic: bytes = serializable_field(4)    # H2CS (StarCraft 2 Header)
-    unk1: bytes  = serializable_field(4)        # \x8\0\0\0 (record break?)
-    game_magic: bytes  = serializable_field(4)  # 2S\0\0 (StarCraft 2)
-    unk2: bytes  = serializable_field(4)        # \x8\0\0\0 (record break?)
-    unk3: bytes  = serializable_field(8)        # \xe1\x38\x1\0\xe1\x38\x1\0
-    unk4: bytes  = serializable_field(20)       # ?
-    num_deps: int = serializable_field(4)       # Number of dependencies
-    # TODO: Maybe we could chain values of variable size?
-    # dependencies: list[str] = scanner(value.split, (b'\0',), num_deps)
-    # Can scanner types have size? ValueError: cannot specify both size and scanner
+class DocumentHeaderAttribute:
+    key_length: int = serializable_field(UInt16Field())
+    # FIXME: Not a ZString, fixed by `key_length`
+    key: str = serializable_field(ZStringField())
+    locale: int = serializable_field(UInt32Field())
+    value_length: int = serializable_field(UInt16Field())
+    # FIXME: Not a ZString, fixed by `value_length`
+    value: str = serializable_field(ZStringField())
 
 
 @dataclass
-class DocumentHeaderDataAttributeKey:
-    key_length: int  = serializable_field(2)
-    key: str
-
-
-@dataclass
-class DocumentHeaderDataAttributeValue:
-    locale: int = serializable_field(4)
-    value_length: int = serializable_field(2)
-    value: str
-
-
 class DocumentHeader:
-    header: DocumentHeaderData
-    dependencies: list[str]  # null-terminated in file
-    num_atrribs: int  # 4 bytes
-    first_key: list[DocumentHeaderDataAttributeKey]
-    first_value: list[DocumentHeaderDataAttributeValue]
-    # ...
+    # TODO: Validate magics as we go to avoid trying to process bad file types
+    map_magic: bytes = serializable_field(ByteArrayField(4))   # H2CS (StarCraft 2 Header)
+    unk1: bytes = serializable_field(ByteArrayField(4))        # \x8\0\0\0 (record break?)
+    game_magic: bytes = serializable_field(ByteArrayField(4))  # 2S\0\0 (StarCraft 2)
+    unk2: bytes = serializable_field(ByteArrayField(4))        # \x8\0\0\0 (record break?)
+    unk3: bytes = serializable_field(ByteArrayField(8))        # \xe1\x38\x1\0\xe1\x38\x1\0
+    unk4: bytes = serializable_field(ByteArrayField(20))       # ?
+    num_deps: int = serializable_field(UInt32Field())         # Number of dependencies
+    dependencies: str = serializable_list_field(ListField(num_deps, ZStringField()))
+    num_attribs: int = serializable_field(UInt32Field())
+    # TODO: Create nestable dataclass field so that `DocumentHeaderAttribute`s can also live here
 
 
 def read_document_header(path: Path):
     with open(path, 'rb') as map_file:
         data = map_file.read()
 
-    dc, offset = deserialize(data, DocumentHeaderData)
+    dh, offset = deserialize(DocumentHeader, data)
     data = data[offset:]
 
-    print('magic1', dc.map_magic)
-    print('magic2', dc.game_magic)
-
-    dependencies = []
-    for _ in range(dc.num_deps):
-        dep_ascii, data = data.split(b'\0', 1)
-        dependencies.append(dep_ascii.decode('utf-8'))
-    print(dependencies)
-
-    num_atrribs_bytes = data[:4]
-    offset +=4
-    num_atrribs = int.from_bytes(num_atrribs_bytes, 'little', signed=False)
-    print(num_atrribs)
+    print('magic1', dh.map_magic)
+    print('magic2', dh.game_magic)
+    print('depend', dh.dependencies)
+    print('attribs', dh.num_attribs)
 
 
 def main(argv):
