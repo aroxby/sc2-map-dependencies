@@ -6,13 +6,13 @@ from pathlib import Path
 import sys
 
 
-class Field(ABC):
+class Serializer(ABC):
     @abstractmethod
     def deserialize(self, data: bytes):
         raise NotImplementedError
 
 
-class ByteArrayField(Field):
+class ByteArraySerializer(Serializer):
     def __init__(self, length: int):
         self.length = length
 
@@ -20,25 +20,25 @@ class ByteArrayField(Field):
         return data[:self.length], self.length
 
 
-class UInt16Field(Field):
+class UInt16Serializer(Serializer):
     length = 2
 
     def deserialize(self, data: bytes) -> (int, int):
         return int.from_bytes(data[:self.length], byteorder='little', signed=False), self.length
 
 
-class UInt32Field(UInt16Field):
+class UInt32Serializer(UInt16Serializer):
     length = 4
 
 
-class ZStringField(Field):
+class ZStringSerializer(Serializer):
     def deserialize(self, data: bytes) -> (str, int):
         mbs, _ = data.split(b'\0', 1)
         return mbs.decode('utf-8'), len(mbs) + 1
 
 
-class ListField:
-    def __init__(self, length_field: dataclasses.Field, element_field: Field):
+class ListSerializer:
+    def __init__(self, length_field: dataclasses.Field, element_field: Serializer):
         self.length_field = length_field
         self.element_field = element_field
 
@@ -54,11 +54,11 @@ class ListField:
         return elements, offset
 
 
-def serializable_field(serializer: Field) -> dataclasses.Field:
+def serializer_field(serializer: Serializer) -> dataclasses.Field:
     return dataclasses.field(metadata={'serializer': serializer})
 
 
-def serializable_list_field(list_field: ListField) -> dataclasses.Field:
+def serializer_list_field(list_field: ListField) -> dataclasses.Field:
     return dataclasses.field(metadata={'list': list_field})
 
 
@@ -84,27 +84,27 @@ def deserialize(cls, data: bytes, offset: int = 0):
 
 @dataclass
 class DocumentHeaderAttribute:
-    key_length: int = serializable_field(UInt16Field())
+    key_length: int = serializer_field(UInt16Serializer())
     # FIXME: Not a ZString, fixed by `key_length`
-    key: str = serializable_field(ZStringField())
-    locale: int = serializable_field(UInt32Field())
-    value_length: int = serializable_field(UInt16Field())
+    key: str = serializer_field(ZStringSerializer())
+    locale: int = serializer_field(UInt32Serializer())
+    value_length: int = serializer_field(UInt16Serializer())
     # FIXME: Not a ZString, fixed by `value_length`
-    value: str = serializable_field(ZStringField())
+    value: str = serializer_field(ZStringSerializer())
 
 
 @dataclass
 class DocumentHeader:
     # TODO: Validate magics as we go to avoid trying to process bad file types
-    map_magic: bytes = serializable_field(ByteArrayField(4))   # H2CS (StarCraft 2 Header)
-    unk1: bytes = serializable_field(ByteArrayField(4))        # \x8\0\0\0 (record break?)
-    game_magic: bytes = serializable_field(ByteArrayField(4))  # 2S\0\0 (StarCraft 2)
-    unk2: bytes = serializable_field(ByteArrayField(4))        # \x8\0\0\0 (record break?)
-    unk3: bytes = serializable_field(ByteArrayField(8))        # \xe1\x38\x1\0\xe1\x38\x1\0
-    unk4: bytes = serializable_field(ByteArrayField(20))       # ?
-    num_deps: int = serializable_field(UInt32Field())         # Number of dependencies
-    dependencies: str = serializable_list_field(ListField(num_deps, ZStringField()))
-    num_attribs: int = serializable_field(UInt32Field())
+    map_magic: bytes = serializer_field(ByteArraySerializer(4))   # H2CS (StarCraft 2 Header)
+    unk1: bytes = serializer_field(ByteArraySerializer(4))        # \x8\0\0\0 (record break?)
+    game_magic: bytes = serializer_field(ByteArraySerializer(4))  # 2S\0\0 (StarCraft 2)
+    unk2: bytes = serializer_field(ByteArraySerializer(4))        # \x8\0\0\0 (record break?)
+    unk3: bytes = serializer_field(ByteArraySerializer(8))        # \xe1\x38\x1\0\xe1\x38\x1\0
+    unk4: bytes = serializer_field(ByteArraySerializer(20))       # ?
+    num_deps: int = serializer_field(UInt32Serializer())         # Number of dependencies
+    dependencies: str = serializer_list_field(ListSerializer(num_deps, ZStringSerializer()))
+    num_attribs: int = serializer_field(UInt32Serializer())
     # TODO: Create nestable dataclass field so that `DocumentHeaderAttribute`s can also live here
 
 
