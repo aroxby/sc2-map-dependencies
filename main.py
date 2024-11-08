@@ -86,6 +86,15 @@ class EncodedLengthSerializer(Serializer):
         return self.element_field.deserialize(attributes, data)
 
 
+class DataClassSerializer(Serializer):
+    def __init__(self, data_class, validator=None):
+        super().__init__(validator)
+        self.data_class = data_class
+
+    def deserialize(self, attributes: dict, data: bytes):
+        return deserialize(self.data_class, data)
+
+
 def serializer_field(serializer: Serializer) -> dataclasses.Field:
     return dataclasses.field(metadata={'serializer': serializer})
 
@@ -127,7 +136,6 @@ class DocumentHeaderAttribute:
 
 @dataclass
 class DocumentHeader:
-    # TODO: Validate magics as we go to avoid trying to process bad file types
     map_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'H2CS')))   # H2CS (StarCraft 2 Header)
     unk1: bytes = serializer_field(ByteArraySerializer(4))        # \x8\0\0\0 (record break?)
     game_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'2S\0\0')))  # 2S\0\0 (StarCraft 2)
@@ -135,9 +143,10 @@ class DocumentHeader:
     unk3: bytes = serializer_field(ByteArraySerializer(8))        # \xe1\x38\x1\0\xe1\x38\x1\0
     unk4: bytes = serializer_field(ByteArraySerializer(20))       # ?
     num_deps: int = serializer_field(UInt32Serializer())         # Number of dependencies
-    dependencies: str = serializer_field(ListSerializer(num_deps, ZStringSerializer()))
+    dependencies: list[str] = serializer_field(ListSerializer(num_deps, ZStringSerializer()))
     num_attribs: int = serializer_field(UInt32Serializer())
-    # TODO: Create nestable dataclass field so that `DocumentHeaderAttribute`s can also live here
+    attribs: list[DocumentHeaderAttribute] = serializer_field(
+        ListSerializer(num_attribs, DataClassSerializer(DocumentHeaderAttribute)))
 
 
 def read_document_header(path: Path):
@@ -147,15 +156,11 @@ def read_document_header(path: Path):
     dh, offset = deserialize(DocumentHeader, data)
     data = data[offset:]
 
-    print('magic1', dh.map_magic)
-    print('magic2', dh.game_magic)
-    print('depend', dh.dependencies)
-    print('attribs', dh.num_attribs)
+    print('First and last attributes:')
+    print(dh.attribs[0])
+    print(dh.attribs[-1])
 
-    dha, offset = deserialize(DocumentHeaderAttribute, data)
-    data = data[offset:]
-    print('First attribute:')
-    print(dha)
+    print(f'{len(data)} bytes left unread')
 
 
 def main(argv):
