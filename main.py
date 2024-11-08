@@ -56,6 +56,19 @@ class DynamicStringSerializer(Serializer):
         return mbs.decode('utf-8'), len(mbs)
 
 
+class FixedStringSerializer(DynamicStringSerializer):
+    def __init__(self, length: int, validator=None):
+        super().__init__(validator)
+        self.length = length
+
+
+class ReverseFixedStringSerializer(FixedStringSerializer):
+    def deserialize(self, attributes: dict, data: bytes) -> (str, int):
+        value, length = super().deserialize(attributes, data)
+        value = value[::-1]
+        return value, length
+
+
 class ListSerializer(Serializer):
     def __init__(self, length_field: dataclasses.Field, element_field: Serializer, validator=None):
         super().__init__(validator)
@@ -126,10 +139,7 @@ def file_magic_validator(magic: bytes):
 class DocumentHeaderAttribute:
     key_length: int = serializer_field(UInt16Serializer())
     key: str = serializer_field(EncodedLengthSerializer(key_length, DynamicStringSerializer()))
-    # Same as used in WOW
-    # | `EN_US` | 1701729619 (0x656E5553) |  |
-    # https://github.com/gtker/wow_messages/blob/b55fe18/wowm_language/src/docs/locale.md?plain=1#L33
-    locale: int = serializer_field(UInt32Serializer())
+    locale: int = serializer_field(ReverseFixedStringSerializer(4))
     value_length: int = serializer_field(UInt16Serializer())
     value: str = serializer_field(EncodedLengthSerializer(value_length, DynamicStringSerializer()))
 
