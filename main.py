@@ -75,17 +75,15 @@ class ListSerializer(Serializer):
         return elements, offset
 
 
-class EncodedLengthField(Serializer):
+class EncodedLengthSerializer(Serializer):
     def __init__(self, length_field: dataclasses.Field, element_field: Serializer, validator=None):
         super().__init__(validator)
         self.length_field = length_field
         self.element_field = element_field
 
-    def deserialize(self, attributes: dict, data: bytes, offset: int = 0) -> (list, int):
+    def deserialize(self, attributes: dict, data: bytes):
         self.element_field.length = attributes[self.length_field.name]
-        element, element_length = self.element_field.deserialize(attributes, data[offset:])
-        offset += element_length
-        return element, offset
+        return self.element_field.deserialize(attributes, data)
 
 
 def serializer_field(serializer: Serializer) -> dataclasses.Field:
@@ -118,13 +116,13 @@ def file_magic_validator(magic: bytes):
 @dataclass
 class DocumentHeaderAttribute:
     key_length: int = serializer_field(UInt16Serializer())
-    key: str = serializer_field(EncodedLengthField(key_length, DynamicStringSerializer()))
+    key: str = serializer_field(EncodedLengthSerializer(key_length, DynamicStringSerializer()))
     # Same as used in WOW
     # | `EN_US` | 1701729619 (0x656E5553) |  |
     # https://github.com/gtker/wow_messages/blob/b55fe18/wowm_language/src/docs/locale.md?plain=1#L33
     locale: int = serializer_field(UInt32Serializer())
     value_length: int = serializer_field(UInt16Serializer())
-    value: str = serializer_field(EncodedLengthField(value_length, DynamicStringSerializer()))
+    value: str = serializer_field(EncodedLengthSerializer(value_length, DynamicStringSerializer()))
 
 
 @dataclass
