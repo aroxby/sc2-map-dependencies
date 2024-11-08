@@ -166,6 +166,10 @@ def read_document_header(path: Path):
     dh, offset = deserialize(DocumentHeader, data)
     data = data[offset:]
 
+    print('Dependencies:')
+    for dependency in dh.dependencies:
+        print(dependency)
+
     print('First and last attributes:')
     print(dh.attribs[0])
     print(dh.attribs[-1])
