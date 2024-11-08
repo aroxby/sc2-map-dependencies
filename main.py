@@ -118,9 +118,9 @@ def file_magic_validator(magic: bytes):
 class DocumentHeaderAttribute:
     key_length: int = serializer_field(UInt16Serializer())
     key: str = serializer_field(EncodedLengthField(key_length, DynamicStringSerializer()))
-    # Same as used in PDFs for some reason?
-    # UNITED_STATES_ENGLISH = 1701729619
-    # https://developer.adobe.com/indesign/dom/api/l/LanguageAndRegion/
+    # Same as used in WOW
+    # | `EN_US` | 1701729619 (0x656E5553) |  |
+    # https://github.com/gtker/wow_messages/blob/b55fe18/wowm_language/src/docs/locale.md?plain=1#L33
     locale: int = serializer_field(UInt32Serializer())
     value_length: int = serializer_field(UInt16Serializer())
     value: str = serializer_field(EncodedLengthField(value_length, DynamicStringSerializer()))
