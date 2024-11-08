@@ -62,8 +62,9 @@ class ListSerializer(Serializer):
         self.length_field = length_field
         self.element_field = element_field
 
-    def deserialize(self, attributes: dict, data: bytes, offset: int = 0) -> (list, int):
+    def deserialize(self, attributes: dict, data: bytes) -> (list, int):
         list_length = attributes[self.length_field.name]
+        offset = 0
         elements = []
 
         for _ in range(list_length):
