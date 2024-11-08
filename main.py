@@ -6,14 +6,25 @@ from pathlib import Path
 import sys
 
 
+class ValidationError(Exception):
+    pass
+
+
 class Serializer(ABC):
+    def __init__(self, validator=None):
+        self.validator = validator
+
+    def validate(self, value):
+        return self.validator(value) if self.validator else None
+
     @abstractmethod
     def deserialize(self, attributes: dict, data: bytes):
         raise NotImplementedError
 
 
 class ByteArraySerializer(Serializer):
-    def __init__(self, length: int):
+    def __init__(self, length: int, validator=None):
+        super().__init__(validator)
         self.length = length
 
     def deserialize(self, attributes: dict, data: bytes) -> (bytes, int):
@@ -46,7 +57,8 @@ class DynamicStringSerializer(Serializer):
 
 
 class ListSerializer(Serializer):
-    def __init__(self, length_field: dataclasses.Field, element_field: Serializer):
+    def __init__(self, length_field: dataclasses.Field, element_field: Serializer, validator=None):
+        super().__init__(validator)
         self.length_field = length_field
         self.element_field = element_field
 
@@ -63,7 +75,8 @@ class ListSerializer(Serializer):
 
 
 class EncodedLengthField(Serializer):
-    def __init__(self, length_field: dataclasses.Field, element_field: Serializer):
+    def __init__(self, length_field: dataclasses.Field, element_field: Serializer, validator=None):
+        super().__init__(validator)
         self.length_field = length_field
         self.element_field = element_field
 
@@ -86,11 +99,19 @@ def deserialize(cls, data: bytes, offset: int = 0):
         if serializer is not None:
             args[fld.name], length = serializer.deserialize(args, data[offset:])
             offset += length
+            serializer.validate(args[fld.name])
         else:
             raise TypeError(f'Unsupported field {fld}')
 
     obj = cls(**args)
     return obj, offset
+
+
+def file_magic_validator(magic: bytes):
+    def validator(value: bytes):
+        if value != magic:
+            raise ValidationError
+    return validator
 
 
 @dataclass
@@ -108,9 +129,9 @@ class DocumentHeaderAttribute:
 @dataclass
 class DocumentHeader:
     # TODO: Validate magics as we go to avoid trying to process bad file types
-    map_magic: bytes = serializer_field(ByteArraySerializer(4))   # H2CS (StarCraft 2 Header)
+    map_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'H2CS')))   # H2CS (StarCraft 2 Header)
     unk1: bytes = serializer_field(ByteArraySerializer(4))        # \x8\0\0\0 (record break?)
-    game_magic: bytes = serializer_field(ByteArraySerializer(4))  # 2S\0\0 (StarCraft 2)
+    game_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'2S\0\0')))  # 2S\0\0 (StarCraft 2)
     unk2: bytes = serializer_field(ByteArraySerializer(4))        # \x8\0\0\0 (record break?)
     unk3: bytes = serializer_field(ByteArraySerializer(8))        # \xe1\x38\x1\0\xe1\x38\x1\0
     unk4: bytes = serializer_field(ByteArraySerializer(20))       # ?
