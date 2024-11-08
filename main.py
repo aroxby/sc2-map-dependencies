@@ -146,15 +146,25 @@ class DocumentHeaderAttribute:
 
 @dataclass
 class DocumentHeader:
-    map_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'H2CS')))   # H2CS (StarCraft 2 Header)
-    unk1: bytes = serializer_field(ByteArraySerializer(4))        # \x8\0\0\0 (record break?)
-    game_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'2S\0\0')))  # 2S\0\0 (StarCraft 2)
-    unk2: bytes = serializer_field(ByteArraySerializer(4))        # \x8\0\0\0 (record break?)
-    unk3: bytes = serializer_field(ByteArraySerializer(8))        # \xe1\x38\x1\0\xe1\x38\x1\0
-    unk4: bytes = serializer_field(ByteArraySerializer(20))       # ?
-    num_deps: int = serializer_field(UInt32Serializer())         # Number of dependencies
+    # H2CS (StarCraft 2 Header)
+    map_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'H2CS')))
+    # \x8\0\0\0 (record break?)
+    unk1: bytes = serializer_field(ByteArraySerializer(4))
+    # 2S\0\0 (StarCraft 2)
+    game_magic: bytes = serializer_field(ByteArraySerializer(4, file_magic_validator(b'2S\0\0')))
+    # \x8\0\0\0 (record break?)
+    unk2: bytes = serializer_field(ByteArraySerializer(4))
+    # \xe1\x38\x1\0\xe1\x38\x1\0
+    unk3: bytes = serializer_field(ByteArraySerializer(8))
+    # ???
+    unk4: bytes = serializer_field(ByteArraySerializer(20))
+    # Number of dependencies
+    num_deps: int = serializer_field(UInt32Serializer())
+    # Name of dependencies (eg: bnet:Swarm Story (Campaign)/0.0/999,file:Campaigns/SwarmStory.SC2Campaign)
     dependencies: list[str] = serializer_field(ListSerializer(num_deps, ZStringSerializer()))
+    # Number of attributes
     num_attribs: int = serializer_field(UInt32Serializer())
+    # Instance of attribute (DocumentHeaderAttribute)
     attribs: list[DocumentHeaderAttribute] = serializer_field(
         ListSerializer(num_attribs, DataClassSerializer(DocumentHeaderAttribute)))
 
