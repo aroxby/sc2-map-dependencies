@@ -37,6 +37,14 @@ class ZStringSerializer(Serializer):
         return mbs.decode('utf-8'), len(mbs) + 1
 
 
+class DynamicStringSerializer(Serializer):
+    length = 0  # Length isn't known until other fields are deserialized
+
+    def deserialize(self, attributes: dict, data: bytes) -> (str, int):
+        mbs = data[:self.length]
+        return mbs.decode('utf-8'), len(mbs)
+
+
 class ListSerializer(Serializer):
     def __init__(self, length_field: dataclasses.Field, element_field: Serializer):
         self.length_field = length_field
@@ -52,6 +60,18 @@ class ListSerializer(Serializer):
             offset += element_length
 
         return elements, offset
+
+
+class EncodedLengthField(Serializer):
+    def __init__(self, length_field: dataclasses.Field, element_field: Serializer):
+        self.length_field = length_field
+        self.element_field = element_field
+
+    def deserialize(self, attributes: dict, data: bytes, offset: int = 0) -> (list, int):
+        self.element_field.length = attributes[self.length_field.name]
+        element, element_length = self.element_field.deserialize(attributes, data[offset:])
+        offset += element_length
+        return element, offset
 
 
 def serializer_field(serializer: Serializer) -> dataclasses.Field:
@@ -76,12 +96,13 @@ def deserialize(cls, data: bytes, offset: int = 0):
 @dataclass
 class DocumentHeaderAttribute:
     key_length: int = serializer_field(UInt16Serializer())
-    # FIXME: Not a ZString, fixed by `key_length`
-    key: str = serializer_field(ZStringSerializer())
+    key: str = serializer_field(EncodedLengthField(key_length, DynamicStringSerializer()))
+    # Same as used in PDFs for some reason?
+    # UNITED_STATES_ENGLISH = 1701729619
+    # https://developer.adobe.com/indesign/dom/api/l/LanguageAndRegion/
     locale: int = serializer_field(UInt32Serializer())
     value_length: int = serializer_field(UInt16Serializer())
-    # FIXME: Not a ZString, fixed by `value_length`
-    value: str = serializer_field(ZStringSerializer())
+    value: str = serializer_field(EncodedLengthField(value_length, DynamicStringSerializer()))
 
 
 @dataclass
@@ -110,6 +131,11 @@ def read_document_header(path: Path):
     print('magic2', dh.game_magic)
     print('depend', dh.dependencies)
     print('attribs', dh.num_attribs)
+
+    dha, offset = deserialize(DocumentHeaderAttribute, data)
+    data = data[offset:]
+    print('First attribute:')
+    print(dha)
 
 
 def main(argv):
