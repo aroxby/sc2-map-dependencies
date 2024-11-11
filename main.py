@@ -6,6 +6,8 @@ import hashlib
 from pathlib import Path
 import sys
 
+STRING_CODEC = 'cp437'
+
 
 class ValidationError(Exception):
     pass
@@ -56,10 +58,10 @@ class UInt32Serializer(UInt16Serializer):
 class ZStringSerializer(Serializer):
     def deserialize(self, attributes: dict, data: bytes) -> (str, int):
         mbs, _ = data.split(b'\0', 1)
-        return mbs.decode('utf-8'), len(mbs) + 1
+        return mbs.decode(STRING_CODEC), len(mbs) + 1
 
     def serialize(self, obj) -> bytes:
-        return obj.encode('utf-8') + b'\0'
+        return obj.encode(STRING_CODEC) + b'\0'
 
 
 class DynamicStringSerializer(Serializer):
@@ -67,10 +69,10 @@ class DynamicStringSerializer(Serializer):
 
     def deserialize(self, attributes: dict, data: bytes) -> (str, int):
         mbs = data[:self.length]
-        return mbs.decode('utf-8'), len(mbs)
+        return mbs.decode(STRING_CODEC), len(mbs)
 
     def serialize(self, obj) -> bytes:
-        return obj.encode('utf-8')
+        return obj.encode(STRING_CODEC)
 
 
 class FixedStringSerializer(DynamicStringSerializer):
