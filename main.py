@@ -2,6 +2,7 @@
 import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 import sys
 
@@ -21,6 +22,10 @@ class Serializer(ABC):
     def deserialize(self, attributes: dict, data: bytes):
         raise NotImplementedError
 
+    @abstractmethod
+    def serialize(self, obj) -> bytes:
+        raise NotImplementedError
+
 
 class ByteArraySerializer(Serializer):
     def __init__(self, length: int, validator=None):
@@ -30,12 +35,18 @@ class ByteArraySerializer(Serializer):
     def deserialize(self, attributes: dict, data: bytes) -> (bytes, int):
         return data[:self.length], self.length
 
+    def serialize(self, obj) -> bytes:
+        return obj[:self.length]
+
 
 class UInt16Serializer(Serializer):
     length = 2
 
     def deserialize(self, attributes: dict, data: bytes) -> (int, int):
         return int.from_bytes(data[:self.length], byteorder='little', signed=False), self.length
+
+    def serialize(self, obj) -> bytes:
+        return obj.to_bytes(length=self.length, byteorder='little', signed=False)
 
 
 class UInt32Serializer(UInt16Serializer):
@@ -47,6 +58,9 @@ class ZStringSerializer(Serializer):
         mbs, _ = data.split(b'\0', 1)
         return mbs.decode('utf-8'), len(mbs) + 1
 
+    def serialize(self, obj) -> bytes:
+        return obj.encode('utf-8') + b'\0'
+
 
 class DynamicStringSerializer(Serializer):
     length = 0  # Length isn't known until other fields are deserialized
@@ -54,6 +68,9 @@ class DynamicStringSerializer(Serializer):
     def deserialize(self, attributes: dict, data: bytes) -> (str, int):
         mbs = data[:self.length]
         return mbs.decode('utf-8'), len(mbs)
+
+    def serialize(self, obj) -> bytes:
+        return obj.encode('utf-8')
 
 
 class FixedStringSerializer(DynamicStringSerializer):
@@ -67,6 +84,9 @@ class ReverseFixedStringSerializer(FixedStringSerializer):
         value, length = super().deserialize(attributes, data)
         value = value[::-1]
         return value, length
+
+    def serialize(self, obj) -> bytes:
+        return super().serialize(obj[::-1])
 
 
 class DynamicListSerializer(Serializer):
@@ -87,6 +107,12 @@ class DynamicListSerializer(Serializer):
 
         return elements, offset
 
+    def serialize(self, obj) -> bytes:
+        data = b''
+        for element in obj:
+            data += self.element_field.serialize(element)
+        return data
+
 
 class EncodedLengthSerializer(Serializer):
     def __init__(self, length_field: Serializer, element_field: Serializer, validator=None):
@@ -100,6 +126,11 @@ class EncodedLengthSerializer(Serializer):
         element, element_length = self.element_field.deserialize(attributes, data[offset:])
         return element, offset + element_length
 
+    def serialize(self, obj) -> bytes:
+        data = self.length_field.serialize(len(obj))
+        data += self.element_field.serialize(obj)
+        return data
+
 
 class DataClassSerializer(Serializer):
     def __init__(self, data_class, validator=None):
@@ -108,6 +139,9 @@ class DataClassSerializer(Serializer):
 
     def deserialize(self, attributes: dict, data: bytes):
         return deserialize(self.data_class, data)
+
+    def serialize(self, obj) -> bytes:
+        return serialize(obj)
 
 
 def serializer_field(serializer: Serializer) -> dataclasses.Field:
@@ -130,6 +164,20 @@ def deserialize(cls, data: bytes, offset: int = 0):
     return obj, offset
 
 
+def serialize(obj) -> bytes:
+    cls = obj.__class__
+    data = b''
+    for fld in dataclasses.fields(cls):
+        serializer = fld.metadata.get('serializer', None)
+
+        if serializer is not None:
+            data += serializer.serialize(getattr(obj, fld.name))
+        else:
+            raise TypeError(f'Unsupported field {fld}')
+
+    return data
+
+
 def file_magic_validator(magic: bytes):
     def validator(value: bytes):
         if value != magic:
@@ -137,6 +185,7 @@ def file_magic_validator(magic: bytes):
     return validator
 
 
+# TODO: Object classes and their serializers are conflated and should be separate objects
 @dataclass
 class DocumentHeaderAttribute:
     key: str = serializer_field(EncodedLengthSerializer(UInt16Serializer(), DynamicStringSerializer()))
@@ -166,9 +215,12 @@ class DocumentHeader:
         EncodedLengthSerializer(UInt32Serializer(), DynamicListSerializer(DataClassSerializer(DocumentHeaderAttribute))))
 
 
-def read_document_header(path: Path):
-    with open(path, 'rb') as map_file:
-        data = map_file.read()
+def read_document_header(path: Path) -> DocumentHeader:
+    with open(path, 'rb') as header_file:
+        data = header_file.read()
+
+    print('Input size', len(data))
+    print('Input hash', hashlib.md5(data).hexdigest())
 
     dh, offset = deserialize(DocumentHeader, data)
     data = data[offset:]
@@ -183,6 +235,15 @@ def read_document_header(path: Path):
 
     print(f'{len(data)} bytes left unread')
 
+    return dh
+
+
+def write_document_header(dh: DocumentHeader):
+    data = serialize(dh)
+    print('Output size', len(data))
+    print('Output hash', hashlib.md5(data).hexdigest())
+    print('Writing disabled for testing')
+
 
 def main(argv):
     if len(argv) != 2:
@@ -190,7 +251,8 @@ def main(argv):
         return 1
 
     map_path = Path(argv[1])
-    read_document_header(map_path / 'documentheader')
+    document_header = read_document_header(map_path / 'documentheader')
+    write_document_header(document_header)
 
     return 0
 
