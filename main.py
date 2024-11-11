@@ -69,18 +69,18 @@ class ReverseFixedStringSerializer(FixedStringSerializer):
         return value, length
 
 
-class ListSerializer(Serializer):
-    def __init__(self, length_field: dataclasses.Field, element_field: Serializer, validator=None):
+class DynamicListSerializer(Serializer):
+    length = 0  # Length isn't known until other fields are deserialized
+
+    def __init__(self, element_field: Serializer, validator=None):
         super().__init__(validator)
-        self.length_field = length_field
         self.element_field = element_field
 
     def deserialize(self, attributes: dict, data: bytes) -> (list, int):
-        list_length = attributes[self.length_field.name]
         offset = 0
         elements = []
 
-        for _ in range(list_length):
+        for _ in range(self.length):
             element, element_length = self.element_field.deserialize(attributes, data[offset:])
             elements.append(element)
             offset += element_length
@@ -89,14 +89,16 @@ class ListSerializer(Serializer):
 
 
 class EncodedLengthSerializer(Serializer):
-    def __init__(self, length_field: dataclasses.Field, element_field: Serializer, validator=None):
+    def __init__(self, length_field: Serializer, element_field: Serializer, validator=None):
         super().__init__(validator)
         self.length_field = length_field
         self.element_field = element_field
 
     def deserialize(self, attributes: dict, data: bytes):
-        self.element_field.length = attributes[self.length_field.name]
-        return self.element_field.deserialize(attributes, data)
+        length, offset = self.length_field.deserialize(attributes, data)
+        self.element_field.length = length
+        element, element_length = self.element_field.deserialize(attributes, data[offset:])
+        return element, offset + element_length
 
 
 class DataClassSerializer(Serializer):
@@ -137,11 +139,9 @@ def file_magic_validator(magic: bytes):
 
 @dataclass
 class DocumentHeaderAttribute:
-    key_length: int = serializer_field(UInt16Serializer())
-    key: str = serializer_field(EncodedLengthSerializer(key_length, DynamicStringSerializer()))
+    key: str = serializer_field(EncodedLengthSerializer(UInt16Serializer(), DynamicStringSerializer()))
     locale: int = serializer_field(ReverseFixedStringSerializer(4))
-    value_length: int = serializer_field(UInt16Serializer())
-    value: str = serializer_field(EncodedLengthSerializer(value_length, DynamicStringSerializer()))
+    value: str = serializer_field(EncodedLengthSerializer(UInt16Serializer(), DynamicStringSerializer()))
 
 
 @dataclass
@@ -158,15 +158,12 @@ class DocumentHeader:
     unk3: bytes = serializer_field(ByteArraySerializer(8))
     # ???
     unk4: bytes = serializer_field(ByteArraySerializer(20))
-    # Number of dependencies
-    num_deps: int = serializer_field(UInt32Serializer())
-    # Name of dependencies (eg: bnet:Swarm Story (Campaign)/0.0/999,file:Campaigns/SwarmStory.SC2Campaign)
-    dependencies: list[str] = serializer_field(ListSerializer(num_deps, ZStringSerializer()))
-    # Number of attributes
-    num_attribs: int = serializer_field(UInt32Serializer())
-    # Instance of attribute (DocumentHeaderAttribute)
+    # Map dependencies (eg: bnet:Swarm Story (Campaign)/0.0/999,file:Campaigns/SwarmStory.SC2Campaign)
+    dependencies: list[str] = serializer_field(
+        EncodedLengthSerializer(UInt32Serializer(), DynamicListSerializer(ZStringSerializer())))
+    # Map attributes (DocumentHeaderAttribute)
     attribs: list[DocumentHeaderAttribute] = serializer_field(
-        ListSerializer(num_attribs, DataClassSerializer(DocumentHeaderAttribute)))
+        EncodedLengthSerializer(UInt32Serializer(), DynamicListSerializer(DataClassSerializer(DocumentHeaderAttribute))))
 
 
 def read_document_header(path: Path):
