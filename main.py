@@ -2,7 +2,6 @@
 import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import hashlib
 from pathlib import Path
 import sys
 
@@ -221,30 +220,18 @@ def read_document_header(path: Path) -> DocumentHeader:
     with open(path, 'rb') as header_file:
         data = header_file.read()
 
-    print('Input size', len(data))
-    print('Input hash', hashlib.md5(data).hexdigest())
-
-    dh, offset = deserialize(DocumentHeader, data)
-    data = data[offset:]
-
-    print('Dependencies:')
-    for dependency in dh.dependencies:
-        print(dependency)
-
-    print('First and last attributes:')
-    print(dh.attribs[0])
-    print(dh.attribs[-1])
-
-    print(f'{len(data)} bytes left unread')
-
+    dh, _ = deserialize(DocumentHeader, data)
     return dh
 
 
 def write_document_header(dh: DocumentHeader):
     data = serialize(dh)
-    print('Output size', len(data))
-    print('Output hash', hashlib.md5(data).hexdigest())
     print('Writing disabled for testing')
+
+
+def do_document_header(document_header_path: Path):
+    dh = read_document_header(document_header_path)
+    write_document_header(dh)
 
 
 def main(argv):
@@ -253,8 +240,9 @@ def main(argv):
         return 1
 
     map_path = Path(argv[1])
-    document_header = read_document_header(map_path / 'documentheader')
-    write_document_header(document_header)
+
+    document_header_path = map_path / 'documentheader'
+    do_document_header(document_header_path)
 
     return 0
 
