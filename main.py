@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 import sys
+from xml.etree import ElementTree
 
 STRING_CODEC = 'cp437'
 
@@ -213,7 +214,8 @@ class DocumentHeader:
         EncodedLengthSerializer(UInt32Serializer(), DynamicListSerializer(ZStringSerializer())))
     # Map attributes (DocumentHeaderAttribute)
     attribs: list[DocumentHeaderAttribute] = serializer_field(
-        EncodedLengthSerializer(UInt32Serializer(), DynamicListSerializer(DataClassSerializer(DocumentHeaderAttribute))))
+        EncodedLengthSerializer(UInt32Serializer(), DynamicListSerializer(DataClassSerializer(DocumentHeaderAttribute)))
+    )
 
 
 def read_document_header(path: Path) -> DocumentHeader:
@@ -234,6 +236,30 @@ def do_document_header(document_header_path: Path):
     write_document_header(dh)
 
 
+def get_or_create_element(parent: ElementTree.Element, name: str) -> ElementTree.Element:
+    element = parent.find(name)
+    if element is None:
+        element = ElementTree.SubElement(parent, name)
+    return element
+
+
+def read_document_info(document_info_path: Path) -> ElementTree.ElementTree:
+    tree = ElementTree.parse(document_info_path)
+    # doc_info = tree.getroot()
+    # dependencies = get_or_create_element(doc_info, 'Dependencies')
+    return tree
+
+
+def write_document_info(doc_info: ElementTree.ElementTree):
+    # tree.write(document_info_path)
+    print('Writing disabled for testing')
+
+
+def do_document_info(document_info_path: Path):
+    doc_info = read_document_info(document_info_path)
+    write_document_info(doc_info)
+
+
 def main(argv):
     if len(argv) != 2:
         print(f'Usage: {argv[0]} PATH/TO/MAP.sc2map', file=sys.stderr)
@@ -243,6 +269,9 @@ def main(argv):
 
     document_header_path = map_path / 'documentheader'
     do_document_header(document_header_path)
+
+    document_info_path = map_path / 'documentinfo'
+    do_document_info(document_info_path)
 
     return 0
 
