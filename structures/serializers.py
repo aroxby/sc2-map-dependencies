@@ -16,12 +16,11 @@ class SerializerMeta(type):
 class Serializer(metaclass=SerializerMeta):
     fields = {}
 
-    # TODO: Drop `attributes`
-    def deserialize(self, attributes: dict, data: bytes) -> (dict, int):
+    def deserialize(self, data: bytes) -> (dict, int):
         attrs = {}
         offset = 0
         for name, field in self.fields.items():
-            attrs[name], field_length = field.deserialize(attributes, data[offset:])
+            attrs[name], field_length = field.deserialize(data[offset:])
             offset += field_length
         return attrs, offset
 

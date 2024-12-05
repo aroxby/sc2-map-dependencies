@@ -58,7 +58,7 @@ def read_document_header(path: Path) -> DocumentHeader:
     with open(path, 'rb') as header_file:
         data = header_file.read()
 
-    attrs, _ = DocumentHeaderSerializer().deserialize({}, data)
+    attrs, _ = DocumentHeaderSerializer().deserialize(data)
     doc_header = DocumentHeader(**attrs)
     # TODO: Would be cool to automatically detect nested classes
     doc_header.attribs = [DocumentHeaderAttribute(**attrib) for attrib in doc_header.attribs]

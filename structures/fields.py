@@ -11,7 +11,7 @@ class Field(ABC):
         return self.validator(value) if self.validator else None
 
     @abstractmethod
-    def deserialize(self, attributes: dict, data: bytes):
+    def deserialize(self, data: bytes):
         raise NotImplementedError
 
     @abstractmethod
@@ -24,7 +24,7 @@ class ByteArrayField(Field):
         super().__init__(validator)
         self.length = length
 
-    def deserialize(self, attributes: dict, data: bytes) -> (bytes, int):
+    def deserialize(self, data: bytes) -> (bytes, int):
         return data[:self.length], self.length
 
     def serialize(self, obj) -> bytes:
@@ -34,7 +34,7 @@ class ByteArrayField(Field):
 class UInt16Field(Field):
     length = 2
 
-    def deserialize(self, attributes: dict, data: bytes) -> (int, int):
+    def deserialize(self, data: bytes) -> (int, int):
         return int.from_bytes(data[:self.length], byteorder='little', signed=False), self.length
 
     def serialize(self, obj) -> bytes:
@@ -46,7 +46,7 @@ class UInt32Field(UInt16Field):
 
 
 class ZStringField(Field):
-    def deserialize(self, attributes: dict, data: bytes) -> (str, int):
+    def deserialize(self, data: bytes) -> (str, int):
         mbs, _ = data.split(b'\0', 1)
         return mbs.decode(STRING_CODEC), len(mbs) + 1
 
@@ -57,7 +57,7 @@ class ZStringField(Field):
 class DynamicStringField(Field):
     length = 0  # Length isn't known until other fields are deserialized
 
-    def deserialize(self, attributes: dict, data: bytes) -> (str, int):
+    def deserialize(self, data: bytes) -> (str, int):
         mbs = data[:self.length]
         return mbs.decode(STRING_CODEC), len(mbs)
 
@@ -72,8 +72,8 @@ class FixedStringField(DynamicStringField):
 
 
 class ReverseFixedStringField(FixedStringField):
-    def deserialize(self, attributes: dict, data: bytes) -> (str, int):
-        value, length = super().deserialize(attributes, data)
+    def deserialize(self, data: bytes) -> (str, int):
+        value, length = super().deserialize(data)
         value = value[::-1]
         return value, length
 
@@ -88,12 +88,12 @@ class DynamicListField(Field):
         super().__init__(validator)
         self.element_field = element_field
 
-    def deserialize(self, attributes: dict, data: bytes) -> (list, int):
+    def deserialize(self, data: bytes) -> (list, int):
         offset = 0
         elements = []
 
         for _ in range(self.length):
-            element, element_length = self.element_field.deserialize(attributes, data[offset:])
+            element, element_length = self.element_field.deserialize(data[offset:])
             elements.append(element)
             offset += element_length
 
@@ -112,10 +112,10 @@ class EncodedLengthField(Field):
         self.length_field = length_field
         self.element_field = element_field
 
-    def deserialize(self, attributes: dict, data: bytes):
-        length, offset = self.length_field.deserialize(attributes, data)
+    def deserialize(self, data: bytes):
+        length, offset = self.length_field.deserialize(data)
         self.element_field.length = length
-        element, element_length = self.element_field.deserialize(attributes, data[offset:])
+        element, element_length = self.element_field.deserialize(data[offset:])
         return element, offset + element_length
 
     def serialize(self, obj) -> bytes:
@@ -129,8 +129,8 @@ class SerializerField(Field):
         super().__init__(validator)
         self.serializer = serializer
 
-    def deserialize(self, attributes: dict, data: bytes) -> (dict, int):
-        return self.serializer.deserialize(attributes, data)
+    def deserialize(self, data: bytes) -> (dict, int):
+        return self.serializer.deserialize(data)
 
     def serialize(self, obj) -> bytes:
         return self.serializer.serialize(obj)
