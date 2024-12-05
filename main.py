@@ -23,9 +23,9 @@ class DocumentHeaderSerializer(Serializer):
     game_magic = fields.ByteArrayField(4, fields.file_magic_validator(b'2S\0\0'))
     # \x8\0\0\0 (record break?)
     unk2 = fields.ByteArrayField(4)
-    # \xe1\x38\x1\0\xe1\x38\x1\0
+    # \xe1\x38\x1\0\xe1\x38\x1\0 (editor version?)
     unk3 = fields.ByteArrayField(8)
-    # ???
+    # ??? (runtime (game) version?)
     unk4 = fields.ByteArrayField(20)
     # Map dependencies (eg: bnet:Swarm Story (Campaign)/0.0/999,file:Campaigns/SwarmStory.SC2Campaign)
     dependencies = fields.EncodedLengthField(fields.UInt32Field(),fields. DynamicListField(fields.ZStringField()))
@@ -68,9 +68,8 @@ def read_document_header(path: Path) -> DocumentHeader:
 def write_document_header(doc_header: DocumentHeader, path: Path):
     attrs = asdict(doc_header)
     data = DocumentHeaderSerializer().serialize(attrs)
-    print('Writing disabled for testing')
-    # with open(path, 'wb') as header_file:
-    #     header_file.write(data)
+    with open(path, 'wb') as header_file:
+        header_file.write(data)
 
 
 def do_document_header(document_header_path: Path):
@@ -93,12 +92,11 @@ def read_document_info(path: Path) -> ElementTree.ElementTree:
 
 
 def write_document_info(doc_info: ElementTree.ElementTree, path: Path):
-    print('Writing disabled for testing')
-    # with open(path, 'w', newline='\r\n') as output:
-    #     # Why fight with the xml writer when I want this exact declaration?
-    #     output.write('<?xml version="1.0" encoding="utf-8"?>\n')
-    #     doc_info.write(output, encoding='unicode', xml_declaration=False)
-    #     output.write('\n')
+    with open(path, 'w', newline='\r\n') as output:
+        # Why fight with the xml writer when I want this exact declaration?
+        output.write('<?xml version="1.0" encoding="utf-8"?>\n')
+        doc_info.write(output, encoding='unicode', xml_declaration=False)
+        output.write('\n')
 
 
 def do_document_info(path: Path):
