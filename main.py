@@ -269,9 +269,11 @@ def read_document_info(path: Path) -> ElementTree.ElementTree:
 
 def write_document_info(doc_info: ElementTree.ElementTree, path: Path):
     print('Writing disabled for testing')
-    # TODO: Detect source document encoding?
-    # FIXME: Always outputs xml version in single quotes but Blizzard uses double quotes
-    # doc_info.write(path, encoding='utf-8', xml_declaration=True)
+    # with open(path, 'w', newline='\r\n') as output:
+    #     # Why fight with the xml writer when I want this exact declaration?
+    #     output.write('<?xml version="1.0" encoding="utf-8"?>\n')
+    #     doc_info.write(output, encoding='unicode', xml_declaration=False)
+    #     output.write('\n')
 
 
 def do_document_info(path: Path):
