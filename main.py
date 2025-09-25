@@ -112,10 +112,10 @@ def main(argv):
 
     map_path = Path(argv[1])
 
-    document_header_path = map_path / "documentheader"
+    document_header_path = map_path / "DocumentHeader"
     do_document_header(document_header_path)
 
-    document_info_path = map_path / "documentinfo"
+    document_info_path = map_path / "DocumentInfo"
     do_document_info(document_info_path)
 
     return 0
