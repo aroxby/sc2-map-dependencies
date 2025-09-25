@@ -4,34 +4,35 @@ from pathlib import Path
 import sys
 from xml.etree import ElementTree
 
-from structures import fields
-from structures.serializers import Serializer
+from seri.serializers import Serializer
+from seri import fields
 
 
 class DocumentHeaderAttributeSerializer(Serializer):
-    key = fields.EncodedLengthField(fields.UInt16Field(), fields.DynamicStringField())
-    locale = fields.ReverseFixedStringField(4)
-    value = fields.EncodedLengthField(fields.UInt16Field(), fields.DynamicStringField())
+    key = fields.EncodedLength(fields.UInt16(), fields.DynamicString())
+    locale = fields.ReverseFixedString(4)
+    value = fields.EncodedLength(fields.UInt16(), fields.DynamicString())
 
 
 class DocumentHeaderSerializer(Serializer):
     # H2CS (StarCraft 2 Header)
-    map_magic = fields.ByteArrayField(4, fields.file_magic_validator(b'H2CS'))
+    map_magic = fields.ByteArray(4, fields.file_magic_validator(b"H2CS"))
     # \x8\0\0\0 (record break?)
-    unk1 = fields.ByteArrayField(4)
+    unk1 = fields.ByteArray(4)
     # 2S\0\0 (StarCraft 2)
-    game_magic = fields.ByteArrayField(4, fields.file_magic_validator(b'2S\0\0'))
+    game_magic = fields.ByteArray(4, fields.file_magic_validator(b"2S\0\0"))
     # \x8\0\0\0 (record break?)
-    unk2 = fields.ByteArrayField(4)
+    unk2 = fields.ByteArray(4)
     # \xe1\x38\x1\0\xe1\x38\x1\0 (editor version?)
-    unk3 = fields.ByteArrayField(8)
+    unk3 = fields.ByteArray(8)
     # ??? (runtime (game) version?)
-    unk4 = fields.ByteArrayField(20)
+    unk4 = fields.ByteArray(20)
     # Map dependencies (eg: bnet:Swarm Story (Campaign)/0.0/999,file:Campaigns/SwarmStory.SC2Campaign)
-    dependencies = fields.EncodedLengthField(fields.UInt32Field(),fields. DynamicListField(fields.ZStringField()))
+    dependencies = fields.EncodedLength(fields.UInt32(), fields.DynamicList(fields.ZString()))
     # Map attributes (DocumentHeaderAttribute)
-    attribs = fields.EncodedLengthField(
-        fields.UInt32Field(), fields.DynamicListField(fields.SerializerField(DocumentHeaderAttributeSerializer()))
+    attribs = fields.EncodedLength(
+        fields.UInt32(),
+        fields.DynamicList(fields.NestedSerializer(DocumentHeaderAttributeSerializer())),
     )
 
 
