@@ -56,7 +56,7 @@ class DocumentHeader:
 
 
 def read_document_header(path: Path) -> DocumentHeader:
-    with open(path, 'rb') as header_file:
+    with open(path, "rb") as header_file:
         data = header_file.read()
 
     attrs, _ = DocumentHeaderSerializer().deserialize(data)
@@ -69,7 +69,7 @@ def read_document_header(path: Path) -> DocumentHeader:
 def write_document_header(doc_header: DocumentHeader, path: Path):
     attrs = asdict(doc_header)
     data = DocumentHeaderSerializer().serialize(attrs)
-    with open(path, 'wb') as header_file:
+    with open(path, "wb") as header_file:
         header_file.write(data)
 
 
@@ -93,11 +93,11 @@ def read_document_info(path: Path) -> ElementTree.ElementTree:
 
 
 def write_document_info(doc_info: ElementTree.ElementTree, path: Path):
-    with open(path, 'w', newline='\r\n') as output:
+    with open(path, "w", newline="\r\n") as output:
         # Why fight with the xml writer when I want this exact declaration?
         output.write('<?xml version="1.0" encoding="utf-8"?>\n')
-        doc_info.write(output, encoding='unicode', xml_declaration=False)
-        output.write('\n')
+        doc_info.write(output, encoding="unicode", xml_declaration=False)
+        output.write("\n")
 
 
 def do_document_info(path: Path):
@@ -107,19 +107,19 @@ def do_document_info(path: Path):
 
 def main(argv):
     if len(argv) != 2:
-        print(f'Usage: {argv[0]} PATH/TO/MAP.sc2map', file=sys.stderr)
+        print(f"Usage: {argv[0]} PATH/TO/MAP.sc2map", file=sys.stderr)
         return 1
 
     map_path = Path(argv[1])
 
-    document_header_path = map_path / 'documentheader'
+    document_header_path = map_path / "documentheader"
     do_document_header(document_header_path)
 
-    document_info_path = map_path / 'documentinfo'
+    document_info_path = map_path / "documentinfo"
     do_document_info(document_info_path)
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))
