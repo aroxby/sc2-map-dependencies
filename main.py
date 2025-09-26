@@ -103,11 +103,16 @@ def read_document_info(path: Path) -> xmlTree:
 def add_document_info_dependency(tree: xmlTree, dependency: str):
     doc_info = tree.getroot()
     dependencies = get_or_create_element(doc_info, "Dependencies")
-    for dep in dependencies.findall("Dependency"):
+    last_sib = None
+    for dep in dependencies.findall("Value"):
         if dep.text == dependency:
             return
-    new_dep = ElementTree.SubElement(dependencies, "Dependency")
+        last_sib = dep
+    if last_sib is not None:
+        last_sib.tail = (last_sib.tail or "") + "    "  # Pretty print hack
+    new_dep = ElementTree.SubElement(dependencies, "Value")
     new_dep.text = dependency
+    new_dep.tail = "\n    "  # Pretty print hack
 
 
 def write_document_info(doc_info: xmlTree, path: Path):
