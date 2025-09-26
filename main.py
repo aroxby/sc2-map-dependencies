@@ -8,6 +8,9 @@ from seri.serializers import Serializer
 from seri import fields
 
 
+type xmlTree = ElementTree.ElementTree[ElementTree.Element[str]]
+
+
 class DocumentHeaderAttributeSerializer(Serializer):
     key = fields.EncodedLength(fields.UInt16(), fields.DynamicString())
     locale = fields.ReverseFixedString(4)
@@ -73,8 +76,15 @@ def write_document_header(doc_header: DocumentHeader, path: Path):
         header_file.write(data)
 
 
-def do_document_header(document_header_path: Path):
+def add_document_header_dependency(doc_header: DocumentHeader, dependency: str):
+    if dependency not in doc_header.dependencies:
+        doc_header.dependencies.append(dependency)
+
+
+def do_document_header(document_header_path: Path, deps_to_add: list[str]):
     doc_header = read_document_header(document_header_path)
+    for dep in deps_to_add:
+        add_document_header_dependency(doc_header, dep)
     write_document_header(doc_header, document_header_path)
 
 
@@ -85,14 +95,22 @@ def get_or_create_element(parent: ElementTree.Element, name: str) -> ElementTree
     return element
 
 
-def read_document_info(path: Path) -> ElementTree.ElementTree:
+def read_document_info(path: Path) -> xmlTree:
     tree = ElementTree.parse(path)
-    # doc_info = tree.getroot()
-    # dependencies = get_or_create_element(doc_info, 'Dependencies')
     return tree
 
 
-def write_document_info(doc_info: ElementTree.ElementTree, path: Path):
+def add_document_info_dependency(tree: xmlTree, dependency: str):
+    doc_info = tree.getroot()
+    dependencies = get_or_create_element(doc_info, "Dependencies")
+    for dep in dependencies.findall("Dependency"):
+        if dep.text == dependency:
+            return
+    new_dep = ElementTree.SubElement(dependencies, "Dependency")
+    new_dep.text = dependency
+
+
+def write_document_info(doc_info: xmlTree, path: Path):
     with open(path, "w", newline="\r\n") as output:
         # Why fight with the xml writer when I want this exact declaration?
         output.write('<?xml version="1.0" encoding="utf-8"?>\n')
@@ -100,23 +118,26 @@ def write_document_info(doc_info: ElementTree.ElementTree, path: Path):
         output.write("\n")
 
 
-def do_document_info(path: Path):
+def do_document_info(path: Path, deps_to_add: list[str]):
     doc_info = read_document_info(path)
+    for dep in deps_to_add:
+        add_document_info_dependency(doc_info, dep)
     write_document_info(doc_info, path)
 
 
 def main(argv):
-    if len(argv) != 2:
-        print(f"Usage: {argv[0]} PATH/TO/MAP.sc2map", file=sys.stderr)
+    if len(argv) < 3:
+        print(f"Usage: {argv[0]} PATH/TO/MAP.sc2map DEP_TO_ADD [DEP_TO_ADD ...]", file=sys.stderr)
         return 1
 
     map_path = Path(argv[1])
+    dependencies = argv[2:]
 
     document_header_path = map_path / "DocumentHeader"
-    do_document_header(document_header_path)
+    do_document_header(document_header_path, dependencies)
 
     document_info_path = map_path / "DocumentInfo"
-    do_document_info(document_info_path)
+    do_document_info(document_info_path, dependencies)
 
     return 0
 
